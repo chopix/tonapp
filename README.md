@@ -1,0 +1,408 @@
+# TonApp - Cryptocurrency Investment Platform
+
+A robust investment platform built with Go, featuring multi-level referral system, investment management, and comprehensive operation tracking.
+
+## Features
+
+### Investment System
+- Three investment tiers with different weekly interest rates:
+  - Low: 1.5% weekly
+  - Medium: 2.25% weekly
+  - High: 3% weekly
+- 30-day lock period for all investment types
+- 20% platform fee on investment profits
+- Real-time investment tracking and management
+
+### TON Integration
+- Automatic deposit address generation
+- Secure withdrawal processing with transaction tracking
+- Transaction hash storage and retrieval
+- Support for both mainnet and testnet
+- Configurable wallet versions (V4R2 supported)
+
+### Referral System
+- Three-level deep referral structure:
+  - Level 1 (Direct referrals): 7% of earnings
+  - Level 2 (Referrals of referrals): 3% of earnings
+  - Level 3 (Third-level referrals): 1% of earnings
+- Comprehensive referral statistics
+- Automatic earning distribution
+
+### Operation History
+- Detailed tracking of all user operations:
+  - Investment creation and closure
+  - Deposits and withdrawals (including transaction hashes)
+  - Referral earnings
+- Rich metadata for each operation
+- Pagination support for operation history
+- Timestamps and detailed descriptions
+
+### Security Features
+- Admin API key authentication
+- Transaction-based balance updates
+- Secure withdrawal processing
+- Rate limiting
+- TON transaction verification
+
+## API Endpoints
+
+### User Management
+- `POST /api/v1/users` - Create new user
+- `GET /api/v1/users/by-pubkey/:pub_key` - Get user details
+- `DELETE /api/v1/users/:id` - Delete user (admin only)
+- `PUT /api/v1/users/:id/balance` - Update user balance (admin only)
+
+### Investment Operations
+- `POST /api/v1/users/by-pubkey/:pub_key/investments` - Create investment
+- `DELETE /api/v1/users/by-pubkey/:pub_key/investments/:investment_id` - Close investment
+
+### Referral System
+- `GET /api/v1/users/by-pubkey/:pub_key/referrals` - Get referral statistics
+
+### Operation History
+- `GET /api/v1/users/by-pubkey/:pub_key/operations` - Get operation history
+  - Query parameters:
+    - `page` (default: 1)
+    - `page_size` (default: 10, max: 100)
+
+### Financial Operations
+- `POST /api/v1/users/by-pubkey/:pub_key/deposit` - Create deposit request
+- `POST /api/v1/users/by-pubkey/:pub_key/deposit/confirm` - Confirm deposit
+- `POST /api/v1/users/withdraw` - Process withdrawal and return transaction hash
+
+## API Documentation
+
+### User Management
+
+#### Create User
+```http
+POST /api/v1/users
+
+Request:
+{
+    "pub_key": "string",     // Required: User's TON wallet public key
+    "ref_id": number        // Optional: Referrer's ID
+}
+
+Response:
+{
+    "success": true,
+    "error": "string",      // Only present if success is false
+    "user": {
+        "id": number,
+        "pub_key": "string",
+        "balance": number,
+        "ref_id": number    // Optional
+    }
+}
+```
+
+#### Get User
+```http
+GET /api/v1/users/by-pubkey/:pub_key
+
+Response:
+{
+    "success": true,
+    "error": "string",      // Only present if success is false
+    "user": {
+        "id": number,
+        "pub_key": "string",
+        "balance": number,
+        "ref_id": number    // Optional
+    }
+}
+```
+
+### Investment Operations
+
+#### Create Investment
+```http
+POST /api/v1/users/by-pubkey/:pub_key/investments
+
+Request:
+{
+    "type": "string",       // Required: "low", "medium", or "high"
+    "amount": number        // Required: Investment amount in TON
+}
+
+Response:
+{
+    "success": true,
+    "error": "string",      // Only present if success is false
+    "investment": {
+        "id": number,
+        "type": "string",
+        "amount": number,
+        "created_at": "string"
+    }
+}
+```
+
+### Financial Operations
+
+#### Create Deposit
+```http
+POST /api/v1/users/by-pubkey/:pub_key/deposit
+
+Request:
+{
+    "amount": number        // Required: Deposit amount in TON
+}
+
+Response:
+{
+    "success": true,
+    "error": "string",      // Only present if success is false
+    "address": "string",    // Deposit wallet address
+    "memo": "string"        // Memo to include in the transfer
+}
+```
+
+#### Process Withdrawal
+```http
+POST /api/v1/users/withdraw
+
+Request:
+{
+    "pub_key": "string",    // Required: User's TON wallet public key
+    "amount": number        // Required: Withdrawal amount in TON
+}
+
+Response:
+{
+    "success": true,
+    "error": "string",      // Only present if success is false
+    "amount": number,       // Withdrawal amount
+    "address": "string",    // Destination wallet address
+    "tx_hash": "string"     // TON blockchain transaction hash
+}
+
+Error Responses:
+- 400 Bad Request:
+  - "invalid request body"
+  - "insufficient balance"
+  - "user has uncompleted deposits"
+  - "user has uncompleted withdrawals"
+- 404 Not Found:
+  - "user not found"
+- 500 Internal Server Error:
+  - "failed to withdraw funds"
+  - "failed to update balance"
+```
+
+#### Get Operation History
+```http
+GET /api/v1/users/by-pubkey/:pub_key/operations?page=1&page_size=10
+
+Response:
+{
+    "success": true,
+    "error": "string",           // Only present if success is false
+    "operations": [
+        {
+            "id": number,
+            "type": "string",    // "deposit", "withdrawal", "investment", "referral"
+            "amount": number,
+            "description": "string",
+            "created_at": "string",
+            "extra": {
+                "tx_hash": "string"  // Present for withdrawals
+            }
+        }
+    ],
+    "total": number,
+    "page": number,
+    "page_size": number
+}
+```
+
+### Referral System
+
+#### Get Referral Statistics
+```http
+GET /api/v1/users/by-pubkey/:pub_key/referrals
+
+Response:
+{
+    "success": true,
+    "error": "string",      // Only present if success is false
+    "stats": {
+        "total_earnings": number,
+        "referrals": {
+            "level1": [
+                {
+                    "user_id": number,
+                    "earnings": number
+                }
+            ],
+            "level2": [...],
+            "level3": [...]
+        }
+    }
+}
+```
+
+## Configuration
+
+Configuration is managed through `config.json`:
+
+```json
+{
+    "investment_types": {
+        "low": {
+            "weekly_percent": 1.5,
+            "min_amount": 50,
+            "lock_period_days": 30
+        },
+        "medium": {
+            "weekly_percent": 2.25,
+            "min_amount": 100,
+            "lock_period_days": 30
+        },
+        "high": {
+            "weekly_percent": 3,
+            "min_amount": 100,
+            "lock_period_days": 30
+        }
+    },
+    "referral_config": {
+        "level1_percent": 7,
+        "level2_percent": 3,
+        "level3_percent": 1
+    },
+    "admin_api_key": "your-admin-key",
+    "ton": {
+        "network": "mainnet",
+        "mnemonic": "your wallet mnemonic",
+        "api_key": "your toncenter api key",
+        "wallet_version": "V4R2",
+        "fee_wallet_address": "your fee wallet address"
+    },
+    "rate_limit": {
+        "requests_per_second": 2,
+        "burst_size": 10
+    }
+}
+```
+
+## Configuration Example
+
+```json
+{
+    "investment_types": {
+        "low": {
+            "weekly_percent": 1.5,
+            "min_amount": 50,
+            "lock_period_days": 30
+        },
+        "medium": {
+            "weekly_percent": 2.25,
+            "min_amount": 100,
+            "lock_period_days": 30
+        },
+        "high": {
+            "weekly_percent": 3,
+            "min_amount": 100,
+            "lock_period_days": 30
+        }
+    },
+    "referral_config": {
+        "level1_percent": 7,
+        "level2_percent": 3,
+        "level3_percent": 1
+    },
+    "admin_api_key": "your-admin-key",
+    "ton": {
+        "network": "mainnet",        // or "testnet"
+        "mnemonic": "",             // Your wallet's mnemonic phrase
+        "api_key": "",              // Your TonCenter API key
+        "wallet_version": "V4R2",   // TON wallet version
+        "fee_wallet_address": ""    // Address for collecting platform fees
+    },
+    "rate_limit": {
+        "requests_per_second": 2,
+        "burst_size": 10
+    }
+}
+```
+
+## Error Handling
+
+All API endpoints follow a consistent error response format:
+
+```json
+{
+    "success": false,
+    "error": "Error message describing what went wrong"
+}
+```
+
+Common HTTP status codes:
+- 200: Success
+- 400: Bad Request (invalid input)
+- 401: Unauthorized (invalid or missing API key)
+- 404: Not Found
+- 429: Too Many Requests (rate limit exceeded)
+- 500: Internal Server Error
+
+## Database Schema
+
+The application uses SQLite with the following main tables:
+
+### Users Table
+- `id` - User ID
+- `pub_key` - Public key
+- `balance` - Current balance
+- `ref_id` - Referrer ID (optional)
+
+### Investments Table
+- `id` - Investment ID
+- `user_id` - User ID
+- `type` - Investment type (low/medium/high)
+- `amount` - Investment amount
+- `profit` - Current profit
+- `created_at` - Creation timestamp
+- `status` - Investment status
+
+### Withdrawals Table
+- `id` - Withdrawal ID
+- `user_id` - User ID
+- `amount` - Withdrawal amount
+- `status` - Status (pending/completed/failed)
+- `tx_hash` - TON transaction hash
+- `created_at` - Creation timestamp
+
+### Operations Table
+- `id` - Operation ID
+- `user_id` - User ID
+- `type` - Operation type
+- `amount` - Operation amount
+- `status` - Operation status
+- `created_at` - Creation timestamp
+- `extra` - Additional metadata (JSON)
+
+## Getting Started
+
+1. Clone the repository
+2. Configure `config.json` with your settings:
+   - Set your admin API key
+   - Configure TON wallet settings:
+     - Set `network` to "mainnet" or "testnet"
+     - Provide your wallet `mnemonic`
+     - Add your TonCenter `api_key`
+     - Set `wallet_version` (V4R2 recommended)
+     - Configure `fee_wallet_address` for platform fees
+3. Run the application:
+   ```bash
+   go run cmd/main.go
+   ```
+
+## Security Notes
+
+1. Keep your wallet mnemonic secure and never share it
+2. Store your API keys securely
+3. Use HTTPS in production
+4. Regularly backup your database
+5. Monitor withdrawal operations
+6. Keep your admin API key private

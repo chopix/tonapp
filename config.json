@@ -1,18 +1,23 @@
 {
     "investment_types": {
-        "low": {
+        "bronze": {
             "weekly_percent": 1.5,
-            "min_amount": 50,
-            "lock_period_days": 30
+            "min_amount": 10,
+            "lock_period_days": 1
         },
-        "medium": {
-            "weekly_percent": 2.25,
+        "silver": {
+            "weekly_percent": 2.5,
             "min_amount": 100,
-            "lock_period_days": 30
+            "lock_period_days": 1
         },
-        "high": {
-            "weekly_percent": 3,
-            "min_amount": 100,
+        "gold": {
+            "weekly_percent": 5,
+            "min_amount": 500,
+            "lock_period_days": 14
+        },
+        "black": {
+            "weekly_percent": 9,
+            "min_amount": 1000,
             "lock_period_days": 30
         }
     },

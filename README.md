@@ -86,7 +86,10 @@ A robust investment platform built with Go, featuring multi-level referral syste
 curl -X POST http://localhost:8080/api/v1/users \
   -H "Content-Type: application/json" \
   -d '{
-    "pub_key": "EQBvW8Z5huBkMJYdnfAEM5JqTNkuWX3diqYENkWsIL0XggGG"
+    "pub_key": "EQBvW8Z5huBkMJYdnfAEM5JqTNkuWX3diqYENkWsIL0XggGG",
+    "id": 908215144769, //optional
+    "photo": "photo_url", //optional
+    "name": "John Doe" //optional
   }'
 
 Response:
@@ -108,7 +111,10 @@ curl -X POST http://localhost:8080/api/v1/users \
   -H "Content-Type: application/json" \
   -d '{
     "pub_key": "EQBKgXCNLPz0TN4lj3YKcwJHPJyCAXS4tGbgqXTUPe9aBY9G",
-    "ref_id": 908215144769
+    "ref_id": 908215144769, 
+    "id": 182275483416, //optional
+    "photo": "photo_url", //optional
+    "name": "John Doe" //optional
   }'
 
 Response:
@@ -191,8 +197,11 @@ Response:
                 "earnings_from_user": 0,
                 "earnings_from_user_usd": 0,
                 "level1_earnings": 0,
+                "level1_earnings_usd": 0,
                 "level2_earnings": 0,
+                "level2_earnings_usd": 0,
                 "level3_earnings": 0,
+                "level3_earnings_usd": 0,
                 "created_at": 0,
                 "active_days": 0
             }
@@ -313,6 +322,12 @@ The application uses SQLite with the following main tables:
 - `pub_key` - Public key
 - `balance` - Current balance
 - `ref_id` - Referrer ID (optional)
+- `name` - User name (optional)
+- `photo` - User photo URL (optional)
+- `created_at` - Creation timestamp
+- `total_earnings` - Total earnings
+- `current_investments` - Current investments
+- `available_for_withdrawal` - Available for withdrawal
 
 ### Investments Table
 - `id` - Investment ID
@@ -364,3 +379,70 @@ The application uses SQLite with the following main tables:
 4. Regularly backup your database
 5. Monitor withdrawal operations
 6. Keep your admin API key private
+
+## Financial Information
+
+### User Financial Overview
+
+The API provides three key financial metrics for each user:
+
+1. **Total Earnings** (`total_earnings`): 
+   - The total amount earned by the user from all sources (investments and referrals)
+   - This value accumulates over time and represents the user's lifetime earnings
+
+2. **Current Investments** (`current_investments`): 
+   - The total amount currently invested across all active investment plans
+   - This value changes as investments are created or closed
+
+3. **Available for Withdrawal** (`available_for_withdrawal`): 
+   - The maximum amount a user can withdraw at the current time
+   - Calculated as 80% of total deposits minus already withdrawn amounts
+   - Cannot exceed the user's current balance
+
+These fields are automatically calculated and included in user responses when retrieving user details. These fields will always be present in the response, even if their values are zero.
+
+### Get User Details
+```bash
+curl -X GET http://localhost:8080/api/v1/users/by-pubkey/EQBvW8Z5huBkMJYdnfAEM5JqTNkuWX3diqYENkWsIL0XggGG
+
+Response:
+{
+    "success": true,
+    "data": {
+        "id": 908215144769,
+        "pub_key": "EQBvW8Z5huBkMJYdnfAEM5JqTNkuWX3diqYENkWsIL0XggGG",
+        "name": "John Doe",
+        "photo": "photo_url",
+        "balance": 0,
+        "ref_id": null,
+        "created_at": 1712834735,
+        "total_earnings": 150.5,
+        "current_investments": 1000,
+        "available_for_withdrawal": 400,
+        "investments": []
+    }
+}
+```
+
+### Example Response with Zero Values
+```bash
+curl -X GET http://localhost:8080/api/v1/users/by-pubkey/EQBvW8Z5huBkMJYdnfAEM5JqTNkuWX3diqYENkWsIL0XggGG
+
+Response:
+{
+    "success": true,
+    "data": {
+        "id": 908215144769,
+        "pub_key": "EQBvW8Z5huBkMJYdnfAEM5JqTNkuWX3diqYENkWsIL0XggGG",
+        "name": "John Doe",
+        "photo": "photo_url",
+        "balance": 0,
+        "ref_id": null,
+        "created_at": 1712834735,
+        "total_earnings": 0,
+        "current_investments": 0,
+        "available_for_withdrawal": 0,
+        "investments": []
+    }
+}
+```

@@ -26,13 +26,18 @@ type UpdateItemRequest struct {
 }
 
 type User struct {
-	ID            int            `json:"id"`
-	PubKey        string         `json:"pub_key"`
-	Balance       float64        `json:"balance"`
-	RefID         *int           `json:"ref_id,omitempty"`
-	CreatedAt     int64          `json:"created_at"`
-	Investments   []Investment   `json:"investments,omitempty"`
-	ReferralStats *ReferralStats `json:"referral_stats,omitempty"`
+	ID                     int            `json:"id"`
+	PubKey                 string         `json:"pub_key"`
+	Name                   *string        `json:"name"`
+	Photo                  *string        `json:"photo"`
+	Balance                float64        `json:"balance"`
+	RefID                  *int           `json:"ref_id,omitempty"`
+	CreatedAt              int64          `json:"created_at"`
+	TotalEarnings          float64        `json:"total_earnings"`
+	CurrentInvestments     float64        `json:"current_investments"`
+	AvailableForWithdrawal float64        `json:"available_for_withdrawal"`
+	Investments            []Investment   `json:"investments,omitempty"`
+	ReferralStats          *ReferralStats `json:"referral_stats,omitempty"`
 }
 
 type Investment struct {
@@ -59,10 +64,13 @@ type ReferralDetail struct {
 	EarningsFromUser    float64 `json:"earnings_from_user"`
 	EarningsFromUserUSD float64 `json:"earnings_from_user_usd"`
 	Level1Earnings      float64 `json:"level1_earnings"`
+	Level1EarningsUSD   float64 `json:"level1_earnings_usd"`
 	Level2Earnings      float64 `json:"level2_earnings"`
+	Level2EarningsUSD   float64 `json:"level2_earnings_usd"`
 	Level3Earnings      float64 `json:"level3_earnings"`
-	CreatedAt          int64   `json:"created_at"`
-	ActiveDays         int     `json:"active_days"`
+	Level3EarningsUSD   float64 `json:"level3_earnings_usd"`
+	CreatedAt           int64   `json:"created_at"`
+	ActiveDays          int     `json:"active_days"`
 }
 
 // ReferralEarning represents a single referral earning record

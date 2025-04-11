@@ -49,6 +49,8 @@ func createTables(db *sql.DB) error {
 			pub_key TEXT UNIQUE NOT NULL,
 			balance REAL NOT NULL DEFAULT 0,
 			ref_id INTEGER,
+			name TEXT,
+			photo TEXT,
 			created_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
 			FOREIGN KEY (ref_id) REFERENCES users(id)
 		)`,
@@ -125,8 +127,8 @@ func (d *Database) Close() error {
 // If customID is provided, it will be used as the user's ID.
 // If customID is nil, a random ID between 1000000000 and 1000000000000 will be generated.
 // If refID is provided, it will be used to establish a referral relationship.
-func (d *Database) CreateUser(pubKey string, refID *int, customID *int) (*model.User, error) {
-	// Сначала проверяем, существует ли пользователь
+func (d *Database) CreateUser(pubKey string, refID *int, customID *int, name *string, photo *string) (*model.User, error) {
+	// Check if user already exists
 	existingUser, err := d.GetUserByPubKey(pubKey)
 	if err != sql.ErrNoRows && err != nil {
 		return nil, err
@@ -150,13 +152,13 @@ func (d *Database) CreateUser(pubKey string, refID *int, customID *int) (*model.
 		id = rand.Intn(1000000000000-1000000000) + 1000000000
 	}
 
-	stmt, err := tx.Prepare("INSERT INTO users (id, pub_key, balance, ref_id) VALUES (?, ?, ?, ?)")
+	stmt, err := tx.Prepare("INSERT INTO users (id, pub_key, balance, ref_id, name, photo, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)")
 	if err != nil {
 		return nil, err
 	}
 	defer stmt.Close()
 
-	_, err = stmt.Exec(id, pubKey, 0, refID)
+	_, err = stmt.Exec(id, pubKey, 0, refID, name, photo, time.Now().Unix())
 	if err != nil {
 		return nil, err
 	}
@@ -172,14 +174,15 @@ func (d *Database) CreateUser(pubKey string, refID *int, customID *int) (*model.
 func (d *Database) GetUserByPubKey(pubKey string) (*model.User, error) {
 	var user model.User
 	var refID sql.NullInt64
+	var name, photo sql.NullString
 
-	stmt, err := d.db.Prepare("SELECT id, pub_key, balance, ref_id FROM users WHERE pub_key = ?")
+	stmt, err := d.db.Prepare("SELECT id, pub_key, balance, ref_id, name, photo, created_at FROM users WHERE pub_key = ?")
 	if err != nil {
 		return nil, err
 	}
 	defer stmt.Close()
 
-	err = stmt.QueryRow(pubKey).Scan(&user.ID, &user.PubKey, &user.Balance, &refID)
+	err = stmt.QueryRow(pubKey).Scan(&user.ID, &user.PubKey, &user.Balance, &refID, &name, &photo, &user.CreatedAt)
 
 	if err == sql.ErrNoRows {
 		return nil, err
@@ -193,11 +196,40 @@ func (d *Database) GetUserByPubKey(pubKey string) (*model.User, error) {
 		user.RefID = &refIDInt
 	}
 
+	if name.Valid {
+		user.Name = &name.String
+	}
+
+	if photo.Valid {
+		user.Photo = &photo.String
+	}
+
 	investments, err := d.getUserInvestments(user.ID)
 	if err != nil {
 		return nil, err
 	}
 	user.Investments = investments
+
+	// Calculate current investments
+	var currentInvestments float64
+	for _, inv := range investments {
+		currentInvestments += inv.Amount
+	}
+	user.CurrentInvestments = currentInvestments
+
+	// Calculate total earnings (from investments and referrals)
+	totalEarnings, err := d.calculateTotalEarnings(user.ID)
+	if err != nil {
+		return nil, err
+	}
+	user.TotalEarnings = totalEarnings
+
+	// Calculate available for withdrawal (80% of total deposits minus already withdrawn)
+	availableForWithdrawal, err := d.calculateAvailableForWithdrawal(user.ID)
+	if err != nil {
+		return nil, err
+	}
+	user.AvailableForWithdrawal = availableForWithdrawal
 
 	return &user, nil
 }
@@ -206,14 +238,15 @@ func (d *Database) GetUserByPubKey(pubKey string) (*model.User, error) {
 func (d *Database) GetUser(id int) (*model.User, error) {
 	var user model.User
 	var refID sql.NullInt64
+	var name, photo sql.NullString
 
-	stmt, err := d.db.Prepare("SELECT id, pub_key, balance, ref_id FROM users WHERE id = ?")
+	stmt, err := d.db.Prepare("SELECT id, pub_key, balance, ref_id, name, photo, created_at FROM users WHERE id = ?")
 	if err != nil {
 		return nil, err
 	}
 	defer stmt.Close()
 
-	err = stmt.QueryRow(id).Scan(&user.ID, &user.PubKey, &user.Balance, &refID)
+	err = stmt.QueryRow(id).Scan(&user.ID, &user.PubKey, &user.Balance, &refID, &name, &photo, &user.CreatedAt)
 
 	if err == sql.ErrNoRows {
 		return nil, err
@@ -227,11 +260,40 @@ func (d *Database) GetUser(id int) (*model.User, error) {
 		user.RefID = &refIDInt
 	}
 
+	if name.Valid {
+		user.Name = &name.String
+	}
+
+	if photo.Valid {
+		user.Photo = &photo.String
+	}
+
 	investments, err := d.getUserInvestments(user.ID)
 	if err != nil {
 		return nil, err
 	}
 	user.Investments = investments
+
+	// Calculate current investments
+	var currentInvestments float64
+	for _, inv := range investments {
+		currentInvestments += inv.Amount
+	}
+	user.CurrentInvestments = currentInvestments
+
+	// Calculate total earnings (from investments and referrals)
+	totalEarnings, err := d.calculateTotalEarnings(user.ID)
+	if err != nil {
+		return nil, err
+	}
+	user.TotalEarnings = totalEarnings
+
+	// Calculate available for withdrawal (80% of total deposits minus already withdrawn)
+	availableForWithdrawal, err := d.calculateAvailableForWithdrawal(user.ID)
+	if err != nil {
+		return nil, err
+	}
+	user.AvailableForWithdrawal = availableForWithdrawal
 
 	return &user, nil
 }
@@ -574,6 +636,14 @@ func (d *Database) GetReferralStats(pubKey string) (*model.ReferralStats, error)
 			TotalInvested:       ref.TotalInvested,
 			EarningsFromUser:    ref.EarningsFromUser,
 			EarningsFromUserUSD: ref.EarningsFromUser * dollarRate,
+			Level1Earnings:      ref.Level1Earnings,
+			Level1EarningsUSD:   ref.Level1Earnings * dollarRate,
+			Level2Earnings:      ref.Level2Earnings,
+			Level2EarningsUSD:   ref.Level2Earnings * dollarRate,
+			Level3Earnings:      ref.Level3Earnings,
+			Level3EarningsUSD:   ref.Level3Earnings * dollarRate,
+			CreatedAt:           ref.CreatedAt,
+			ActiveDays:          ref.ActiveDays,
 		}
 		allReferrals[ref.UserID] = detail
 	}
@@ -582,6 +652,7 @@ func (d *Database) GetReferralStats(pubKey string) (*model.ReferralStats, error)
 	for _, ref := range level2Referrals {
 		if detail, exists := allReferrals[ref.UserID]; exists {
 			detail.Level2Earnings = ref.EarningsFromUser
+			detail.Level2EarningsUSD = ref.EarningsFromUser * dollarRate
 		} else {
 			detail := &model.ReferralDetail{
 				UserID:              ref.UserID,
@@ -589,6 +660,12 @@ func (d *Database) GetReferralStats(pubKey string) (*model.ReferralStats, error)
 				TotalInvested:       ref.TotalInvested,
 				EarningsFromUser:    ref.EarningsFromUser,
 				EarningsFromUserUSD: ref.EarningsFromUser * dollarRate,
+				Level1Earnings:      ref.Level1Earnings,
+				Level1EarningsUSD:   ref.Level1Earnings * dollarRate,
+				Level2Earnings:      ref.Level2Earnings,
+				Level2EarningsUSD:   ref.Level2Earnings * dollarRate,
+				Level3Earnings:      ref.Level3Earnings,
+				Level3EarningsUSD:   ref.Level3Earnings * dollarRate,
 			}
 			allReferrals[ref.UserID] = detail
 		}
@@ -598,6 +675,7 @@ func (d *Database) GetReferralStats(pubKey string) (*model.ReferralStats, error)
 	for _, ref := range level3Referrals {
 		if detail, exists := allReferrals[ref.UserID]; exists {
 			detail.Level3Earnings = ref.EarningsFromUser
+			detail.Level3EarningsUSD = ref.EarningsFromUser * dollarRate
 		} else {
 			detail := &model.ReferralDetail{
 				UserID:              ref.UserID,
@@ -605,6 +683,12 @@ func (d *Database) GetReferralStats(pubKey string) (*model.ReferralStats, error)
 				TotalInvested:       ref.TotalInvested,
 				EarningsFromUser:    ref.EarningsFromUser,
 				EarningsFromUserUSD: ref.EarningsFromUser * dollarRate,
+				Level1Earnings:      ref.Level1Earnings,
+				Level1EarningsUSD:   ref.Level1Earnings * dollarRate,
+				Level2Earnings:      ref.Level2Earnings,
+				Level2EarningsUSD:   ref.Level2Earnings * dollarRate,
+				Level3Earnings:      ref.Level3Earnings,
+				Level3EarningsUSD:   ref.Level3Earnings * dollarRate,
 			}
 			allReferrals[ref.UserID] = detail
 		}
@@ -1015,4 +1099,96 @@ func (d *Database) UpdateWithdrawalTxHash(userID int, txHash string) error {
 	}
 
 	return nil
+}
+
+func (d *Database) calculateTotalEarnings(userID int) (float64, error) {
+	var totalEarnings float64
+
+	// Get earnings from investments
+	rows, err := d.db.Query(`
+		SELECT SUM(amount) FROM operations 
+		WHERE user_id = ? AND type IN ('investment_profit', 'referral_earning')
+	`, userID)
+	if err != nil {
+		return 0, err
+	}
+	defer rows.Close()
+
+	if rows.Next() {
+		var earnings sql.NullFloat64
+		if err := rows.Scan(&earnings); err != nil {
+			return 0, err
+		}
+		if earnings.Valid {
+			totalEarnings = earnings.Float64
+		}
+	}
+
+	return totalEarnings, nil
+}
+
+func (d *Database) calculateAvailableForWithdrawal(userID int) (float64, error) {
+	// Get total deposits
+	var totalDeposits float64
+	rows, err := d.db.Query(`
+		SELECT SUM(amount) FROM operations 
+		WHERE user_id = ? AND type = 'deposit'
+	`, userID)
+	if err != nil {
+		return 0, err
+	}
+	defer rows.Close()
+
+	if rows.Next() {
+		var deposits sql.NullFloat64
+		if err := rows.Scan(&deposits); err != nil {
+			return 0, err
+		}
+		if deposits.Valid {
+			totalDeposits = deposits.Float64
+		}
+	}
+
+	// Get total withdrawals
+	var totalWithdrawals float64
+	rows, err = d.db.Query(`
+		SELECT SUM(amount) FROM operations 
+		WHERE user_id = ? AND type = 'withdrawal'
+	`, userID)
+	if err != nil {
+		return 0, err
+	}
+	defer rows.Close()
+
+	if rows.Next() {
+		var withdrawals sql.NullFloat64
+		if err := rows.Scan(&withdrawals); err != nil {
+			return 0, err
+		}
+		if withdrawals.Valid {
+			totalWithdrawals = withdrawals.Float64
+		}
+	}
+
+	// Calculate available for withdrawal (80% of deposits minus already withdrawn)
+	maxWithdrawal := totalDeposits * 0.8
+	available := maxWithdrawal - totalWithdrawals
+
+	// Cannot withdraw more than current balance
+	if available > 0 {
+		// Get user's current balance
+		var balance float64
+		err := d.db.QueryRow("SELECT balance FROM users WHERE id = ?", userID).Scan(&balance)
+		if err != nil {
+			return 0, err
+		}
+
+		if available > balance {
+			available = balance
+		}
+	} else {
+		available = 0
+	}
+
+	return available, nil
 }

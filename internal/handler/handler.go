@@ -63,9 +63,11 @@ func (h *Handler) AdminAuth() gin.HandlerFunc {
 // CreateUser handles user creation requests
 func (h *Handler) CreateUser(c *gin.Context) {
 	var req struct {
-		PubKey string `json:"pub_key" binding:"required"`
-		RefID  *int   `json:"ref_id"`
-		ID     *int   `json:"id"`
+		PubKey string  `json:"pub_key" binding:"required"`
+		RefID  *int    `json:"ref_id"`
+		ID     *int    `json:"id"`
+		Name   *string `json:"name"`
+		Photo  *string `json:"photo"`
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -76,7 +78,7 @@ func (h *Handler) CreateUser(c *gin.Context) {
 		return
 	}
 
-	user, err := h.db.CreateUser(req.PubKey, req.RefID, req.ID)
+	user, err := h.db.CreateUser(req.PubKey, req.RefID, req.ID, req.Name, req.Photo)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, model.Response{
 			Success: false,
@@ -117,7 +119,6 @@ func (h *Handler) GetUser(c *gin.Context) {
 		})
 		return
 	}
-
 	c.JSON(http.StatusOK, model.Response{
 		Success: true,
 		Data:    user,

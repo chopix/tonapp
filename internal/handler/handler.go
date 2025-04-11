@@ -63,9 +63,9 @@ func (h *Handler) AdminAuth() gin.HandlerFunc {
 // CreateUser handles user creation requests
 func (h *Handler) CreateUser(c *gin.Context) {
 	var req struct {
-		PubKey    string `json:"pub_key" binding:"required"`
-		RefPubKey string `json:"ref_pub_key"`
-		ID        *int   `json:"id"`
+		PubKey string `json:"pub_key" binding:"required"`
+		RefID  *int   `json:"ref_id"`
+		ID     *int   `json:"id"`
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -76,21 +76,7 @@ func (h *Handler) CreateUser(c *gin.Context) {
 		return
 	}
 
-	var refID *int
-	if req.RefPubKey != "" {
-		// Get referrer's ID by public key
-		referrer, err := h.db.GetUserByPubKey(req.RefPubKey)
-		if err != nil {
-			c.JSON(http.StatusBadRequest, model.Response{
-				Success: false,
-				Error:   fmt.Sprintf("referrer not found: %v", err),
-			})
-			return
-		}
-		refID = &referrer.ID
-	}
-
-	user, err := h.db.CreateUser(req.PubKey, refID, req.ID)
+	user, err := h.db.CreateUser(req.PubKey, req.RefID, req.ID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, model.Response{
 			Success: false,
@@ -383,6 +369,15 @@ func (h *Handler) UpdateUserBalance(c *gin.Context) {
 			"balance": req.Balance,
 		},
 	})
+}
+
+// GetConfigPublic returns the current configuration without admin API key and Ton config
+func (h *Handler) GetConfigPublic() model.ConfigPublic {
+	config := h.config
+	return model.ConfigPublic{
+		InvestmentTypes: config.InvestmentTypes,
+		ReferralConfig:  config.ReferralConfig,
+	}
 }
 
 // GetConfig returns the current configuration

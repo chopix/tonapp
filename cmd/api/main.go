@@ -79,15 +79,19 @@ func setupRouter(h *handler.Handler) *gin.Engine {
 	// API v1 routes
 	v1 := router.Group("/api/v1")
 	{
+		// Public routes
+		v1.GET("/config", func(c *gin.Context) {
+			c.JSON(http.StatusOK, h.GetConfigPublic())
+		})
 		// User routes
 		users := v1.Group("/users")
 		{
 			// Public routes
-			users.POST("", h.CreateUser)                                   // Create new user
-			users.GET("/by-pubkey/:pub_key", h.GetUser)                    // Get user by public key
-			users.GET("/by-pubkey/:pub_key/referrals", h.GetReferralStats) // Get referral stats
+			users.POST("", h.CreateUser)                                     // Create new user
+			users.GET("/by-pubkey/:pub_key", h.GetUser)                      // Get user by public key
+			users.GET("/by-pubkey/:pub_key/referrals", h.GetReferralStats)   // Get referral stats
 			users.GET("/by-pubkey/:pub_key/operations", h.GetUserOperations) // Get operation history
-			users.POST("/withdraw", h.WithdrawFunds)                       // Withdraw TON to user's wallet
+			users.POST("/withdraw", h.WithdrawFunds)                         // Withdraw TON to user's wallet
 
 			// Investment routes
 			users.POST("/by-pubkey/:pub_key/investments", h.CreateInvestment)

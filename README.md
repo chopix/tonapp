@@ -1,3 +1,10 @@
+# Build code
+
+docker build -t tonapp-build .
+docker create --name temp tonapp-build
+docker cp temp:/app/tonapp ./tonapp
+docker rm temp
+
 # TonApp - Cryptocurrency Investment Platform
 
 A robust investment platform built with Go, featuring multi-level referral system, investment management, and comprehensive operation tracking.
@@ -70,46 +77,69 @@ A robust investment platform built with Go, featuring multi-level referral syste
 - `POST /api/v1/users/by-pubkey/:pub_key/deposit/confirm` - Confirm deposit
 - `POST /api/v1/users/withdraw` - Process withdrawal and return transaction hash
 
-## API Documentation
+## API Examples
 
 ### User Management
 
-#### Create User
-```http
-POST /api/v1/users
-
-Request:
-{
-    "pub_key": "string",     // Required: User's TON wallet public key
-    "ref_id": number        // Optional: Referrer's ID
-}
+#### Create Main User
+```bash
+curl -X POST http://localhost:8080/api/v1/users \
+  -H "Content-Type: application/json" \
+  -d '{
+    "pub_key": "EQBvW8Z5huBkMJYdnfAEM5JqTNkuWX3diqYENkWsIL0XggGG"
+  }'
 
 Response:
 {
     "success": true,
-    "error": "string",      // Only present if success is false
-    "user": {
-        "id": number,
-        "pub_key": "string",
-        "balance": number,
-        "ref_id": number    // Optional
+    "data": {
+        "id": 908215144769,
+        "pub_key": "EQBvW8Z5huBkMJYdnfAEM5JqTNkuWX3diqYENkWsIL0XggGG",
+        "balance": 0,
+        "ref_id": null,
+        "created_at": 0
     }
 }
 ```
 
-#### Get User
-```http
-GET /api/v1/users/by-pubkey/:pub_key
+#### Create Referral User
+```bash
+curl -X POST http://localhost:8080/api/v1/users \
+  -H "Content-Type: application/json" \
+  -d '{
+    "pub_key": "EQBKgXCNLPz0TN4lj3YKcwJHPJyCAXS4tGbgqXTUPe9aBY9G",
+    "ref_id": 908215144769
+  }'
 
 Response:
 {
     "success": true,
-    "error": "string",      // Only present if success is false
-    "user": {
-        "id": number,
-        "pub_key": "string",
-        "balance": number,
-        "ref_id": number    // Optional
+    "data": {
+        "id": 182275483416,
+        "pub_key": "EQBKgXCNLPz0TN4lj3YKcwJHPJyCAXS4tGbgqXTUPe9aBY9G",
+        "balance": 0,
+        "ref_id": 908215144769,
+        "created_at": 0
+    }
+}
+```
+
+#### Update User Balance (Admin Only)
+```bash
+curl -X PUT "http://localhost:8080/api/v1/users/182275483416/balance" \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: 7d6c4d6d-7d6c-4d6d-7d6c-7d6c4d6d7d6c" \
+  -d '{
+    "user_id": 182275483416,
+    "balance": 1500
+  }'
+
+Response:
+{
+    "success": true,
+    "data": {
+        "balance": 1500,
+        "user_id": 182275483416
     }
 }
 ```
@@ -117,128 +147,56 @@ Response:
 ### Investment Operations
 
 #### Create Investment
-```http
-POST /api/v1/users/by-pubkey/:pub_key/investments
-
-Request:
-{
-    "type": "string",       // Required: "low", "medium", or "high"
-    "amount": number        // Required: Investment amount in TON
-}
+```bash
+curl -X POST "http://localhost:8080/api/v1/users/by-pubkey/EQBKgXCNLPz0TN4lj3YKcwJHPJyCAXS4tGbgqXTUPe9aBY9G/investments" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "type": "high",
+    "amount": 1000
+  }'
 
 Response:
 {
     "success": true,
-    "error": "string",      // Only present if success is false
-    "investment": {
-        "id": number,
-        "type": "string",
-        "amount": number,
-        "created_at": "string"
+    "data": {
+        "amount": 1000,
+        "example_weekly_profit": 30,
+        "lock_period": "locked for 30 days",
+        "message": "investment created successfully",
+        "remaining_balance": 500,
+        "type": "high",
+        "weekly_percent": 3
     }
-}
-```
-
-### Financial Operations
-
-#### Create Deposit
-```http
-POST /api/v1/users/by-pubkey/:pub_key/deposit
-
-Request:
-{
-    "amount": number        // Required: Deposit amount in TON
-}
-
-Response:
-{
-    "success": true,
-    "error": "string",      // Only present if success is false
-    "address": "string",    // Deposit wallet address
-    "memo": "string"        // Memo to include in the transfer
-}
-```
-
-#### Process Withdrawal
-```http
-POST /api/v1/users/withdraw
-
-Request:
-{
-    "pub_key": "string",    // Required: User's TON wallet public key
-    "amount": number        // Required: Withdrawal amount in TON
-}
-
-Response:
-{
-    "success": true,
-    "error": "string",      // Only present if success is false
-    "amount": number,       // Withdrawal amount
-    "address": "string",    // Destination wallet address
-    "tx_hash": "string"     // TON blockchain transaction hash
-}
-
-Error Responses:
-- 400 Bad Request:
-  - "invalid request body"
-  - "insufficient balance"
-  - "user has uncompleted deposits"
-  - "user has uncompleted withdrawals"
-- 404 Not Found:
-  - "user not found"
-- 500 Internal Server Error:
-  - "failed to withdraw funds"
-  - "failed to update balance"
-```
-
-#### Get Operation History
-```http
-GET /api/v1/users/by-pubkey/:pub_key/operations?page=1&page_size=10
-
-Response:
-{
-    "success": true,
-    "error": "string",           // Only present if success is false
-    "operations": [
-        {
-            "id": number,
-            "type": "string",    // "deposit", "withdrawal", "investment", "referral"
-            "amount": number,
-            "description": "string",
-            "created_at": "string",
-            "extra": {
-                "tx_hash": "string"  // Present for withdrawals
-            }
-        }
-    ],
-    "total": number,
-    "page": number,
-    "page_size": number
 }
 ```
 
 ### Referral System
 
 #### Get Referral Statistics
-```http
-GET /api/v1/users/by-pubkey/:pub_key/referrals
+```bash
+curl http://localhost:8080/api/v1/users/by-pubkey/EQBvW8Z5huBkMJYdnfAEM5JqTNkuWX3diqYENkWsIL0XggGG/referrals
 
 Response:
 {
     "success": true,
-    "error": "string",      // Only present if success is false
-    "stats": {
-        "total_earnings": number,
-        "referrals": {
-            "level1": [
-                {
-                    "user_id": number,
-                    "earnings": number
-                }
-            ],
-            "level2": [...],
-            "level3": [...]
-        }
+    "data": {
+        "total_referrals": 1,
+        "total_earnings": 0,
+        "total_earnings_usd": 0,
+        "referrals_by_level": [
+            {
+                "user_id": 182275483416,
+                "level": 1,
+                "total_invested": 1000,
+                "earnings_from_user": 0,
+                "earnings_from_user_usd": 0,
+                "level1_earnings": 0,
+                "level2_earnings": 0,
+                "level3_earnings": 0,
+                "created_at": 0,
+                "active_days": 0
+            }
+        ]
     }
 }
 ```

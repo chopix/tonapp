@@ -49,6 +49,7 @@ func createTables(db *sql.DB) error {
 			pub_key TEXT UNIQUE NOT NULL,
 			balance REAL NOT NULL DEFAULT 0,
 			ref_id INTEGER,
+			created_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
 			FOREIGN KEY (ref_id) REFERENCES users(id)
 		)`,
 		`CREATE TABLE IF NOT EXISTS investments (
@@ -501,6 +502,24 @@ func (d *Database) getUserInvestments(userID int) ([]model.Investment, error) {
 	return investments, nil
 }
 
+func getDollarRate() float64 {
+	resp, err := http.Get("https://api.coingecko.com/api/v3/simple/price?ids=the-open-network&vs_currencies=usd")
+	if err != nil {
+		return 0
+	}
+	defer resp.Body.Close()
+
+	var data map[string]map[string]float64
+	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
+		return 0
+	}
+
+	if rate, ok := data["the-open-network"]["usd"]; ok {
+		return rate
+	}
+	return 0
+}
+
 func (d *Database) GetReferralStats(pubKey string) (*model.ReferralStats, error) {
 	// Get user by public key
 	user, err := d.GetUserByPubKey(pubKey)
@@ -518,7 +537,11 @@ func (d *Database) GetReferralStats(pubKey string) (*model.ReferralStats, error)
 	if err != nil {
 		return nil, err
 	}
-
+	//Get Dollar rate
+	dollarRate := getDollarRate()
+	if dollarRate == 0 {
+		return nil, fmt.Errorf("failed to get dollar rate")
+	}
 	// Get referrals by level
 	var referralsByLevel []model.ReferralDetail
 
@@ -546,10 +569,11 @@ func (d *Database) GetReferralStats(pubKey string) (*model.ReferralStats, error)
 	// Process level 1 referrals
 	for _, ref := range level1Referrals {
 		detail := &model.ReferralDetail{
-			UserID:           ref.UserID,
-			Level:            1,
-			TotalInvested:    ref.TotalInvested,
-			EarningsFromUser: ref.EarningsFromUser,
+			UserID:              ref.UserID,
+			Level:               1,
+			TotalInvested:       ref.TotalInvested,
+			EarningsFromUser:    ref.EarningsFromUser,
+			EarningsFromUserUSD: ref.EarningsFromUser * dollarRate,
 		}
 		allReferrals[ref.UserID] = detail
 	}
@@ -560,10 +584,11 @@ func (d *Database) GetReferralStats(pubKey string) (*model.ReferralStats, error)
 			detail.Level2Earnings = ref.EarningsFromUser
 		} else {
 			detail := &model.ReferralDetail{
-				UserID:           ref.UserID,
-				Level:            2,
-				TotalInvested:    ref.TotalInvested,
-				EarningsFromUser: ref.EarningsFromUser,
+				UserID:              ref.UserID,
+				Level:               2,
+				TotalInvested:       ref.TotalInvested,
+				EarningsFromUser:    ref.EarningsFromUser,
+				EarningsFromUserUSD: ref.EarningsFromUser * dollarRate,
 			}
 			allReferrals[ref.UserID] = detail
 		}
@@ -575,10 +600,11 @@ func (d *Database) GetReferralStats(pubKey string) (*model.ReferralStats, error)
 			detail.Level3Earnings = ref.EarningsFromUser
 		} else {
 			detail := &model.ReferralDetail{
-				UserID:           ref.UserID,
-				Level:            3,
-				TotalInvested:    ref.TotalInvested,
-				EarningsFromUser: ref.EarningsFromUser,
+				UserID:              ref.UserID,
+				Level:               3,
+				TotalInvested:       ref.TotalInvested,
+				EarningsFromUser:    ref.EarningsFromUser,
+				EarningsFromUserUSD: ref.EarningsFromUser * dollarRate,
 			}
 			allReferrals[ref.UserID] = detail
 		}
@@ -592,6 +618,7 @@ func (d *Database) GetReferralStats(pubKey string) (*model.ReferralStats, error)
 	return &model.ReferralStats{
 		TotalReferrals:   len(allReferrals),
 		TotalEarnings:    totalEarnings,
+		TotalEarningsUSD: totalEarnings * dollarRate,
 		ReferralsByLevel: referralsByLevel,
 	}, nil
 }
@@ -605,20 +632,20 @@ func (d *Database) getLevelReferrals(userID int, level int) ([]model.Referral, e
 	var query string
 	switch level {
 	case 1:
-		query = `SELECT id FROM users WHERE ref_id = ?`
+		query = `SELECT id, created_at FROM users WHERE ref_id = ?`
 	case 2:
-		query = `SELECT u2.id 
+		query = `SELECT u2.id, u2.created_at 
 				FROM users u1 
 				JOIN users u2 ON u2.ref_id = u1.id 
 				WHERE u1.ref_id = ?`
 	case 3:
-		query = `SELECT u3.id 
+		query = `SELECT u3.id, u3.created_at 
 				FROM users u1 
 				JOIN users u2 ON u2.ref_id = u1.id 
 				JOIN users u3 ON u3.ref_id = u2.id 
 				WHERE u1.ref_id = ?`
 	default:
-		return nil, fmt.Errorf("invalid referral level")
+		return nil, fmt.Errorf("invalid level: %d", level)
 	}
 
 	rows, err := d.db.Query(query, userID)
@@ -627,13 +654,16 @@ func (d *Database) getLevelReferrals(userID int, level int) ([]model.Referral, e
 	}
 	defer rows.Close()
 
+	currentTime := time.Now().Unix()
+
 	for rows.Next() {
 		var refID int
-		if err := rows.Scan(&refID); err != nil {
+		var createdAt int64
+		if err := rows.Scan(&refID, &createdAt); err != nil {
 			return nil, err
 		}
 
-		// Get total invested amount
+		// Calculate total invested
 		var totalInvested float64
 		err = d.db.QueryRow(`
 			SELECT COALESCE(SUM(amount), 0) 
@@ -654,10 +684,32 @@ func (d *Database) getLevelReferrals(userID int, level int) ([]model.Referral, e
 			return nil, err
 		}
 
+		// Calculate active days
+		activeDays := int((currentTime - createdAt) / (24 * 60 * 60))
+
+		// Get earnings by level
+		var level1Earnings, level2Earnings, level3Earnings float64
+		err = d.db.QueryRow(`
+			SELECT 
+				COALESCE(SUM(CASE WHEN level = 1 THEN amount ELSE 0 END), 0),
+				COALESCE(SUM(CASE WHEN level = 2 THEN amount ELSE 0 END), 0),
+				COALESCE(SUM(CASE WHEN level = 3 THEN amount ELSE 0 END), 0)
+			FROM referral_earnings 
+			WHERE referrer_id = ? AND referred_id = ?`,
+			userID, refID).Scan(&level1Earnings, &level2Earnings, &level3Earnings)
+		if err != nil {
+			return nil, err
+		}
+
 		refs = append(refs, model.Referral{
 			UserID:           refID,
+			CreatedAt:        createdAt,
+			ActiveDays:       activeDays,
 			TotalInvested:    totalInvested,
 			EarningsFromUser: earningsFromUser,
+			Level1Earnings:   level1Earnings,
+			Level2Earnings:   level2Earnings,
+			Level3Earnings:   level3Earnings,
 		})
 	}
 
@@ -947,7 +999,7 @@ func (d *Database) UpdateWithdrawalTxHash(userID int, txHash string) error {
 			ORDER BY created_at DESC 
 			LIMIT 1
 		)`
-	
+
 	result, err := d.db.Exec(query, txHash, StatusCompleted, userID, userID)
 	if err != nil {
 		return fmt.Errorf("failed to update withdrawal tx hash: %v", err)

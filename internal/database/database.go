@@ -634,6 +634,7 @@ func (d *Database) GetReferralStats(pubKey string) (*model.ReferralStats, error)
 			UserID:              ref.UserID,
 			Level:               1,
 			TotalInvested:       ref.TotalInvested,
+			TotalInvestedUSD:    ref.TotalInvested * dollarRate,
 			EarningsFromUser:    ref.EarningsFromUser,
 			EarningsFromUserUSD: ref.EarningsFromUser * dollarRate,
 			Level1Earnings:      ref.Level1Earnings,
@@ -658,6 +659,7 @@ func (d *Database) GetReferralStats(pubKey string) (*model.ReferralStats, error)
 				UserID:              ref.UserID,
 				Level:               2,
 				TotalInvested:       ref.TotalInvested,
+				TotalInvestedUSD:    ref.TotalInvested * dollarRate,
 				EarningsFromUser:    ref.EarningsFromUser,
 				EarningsFromUserUSD: ref.EarningsFromUser * dollarRate,
 				Level1Earnings:      ref.Level1Earnings,
@@ -681,6 +683,7 @@ func (d *Database) GetReferralStats(pubKey string) (*model.ReferralStats, error)
 				UserID:              ref.UserID,
 				Level:               3,
 				TotalInvested:       ref.TotalInvested,
+				TotalInvestedUSD:    ref.TotalInvested * dollarRate,
 				EarningsFromUser:    ref.EarningsFromUser,
 				EarningsFromUserUSD: ref.EarningsFromUser * dollarRate,
 				Level1Earnings:      ref.Level1Earnings,
@@ -784,9 +787,29 @@ func (d *Database) getLevelReferrals(userID int, level int) ([]model.Referral, e
 		if err != nil {
 			return nil, err
 		}
+		// Get photo and name of user
+		var photo, name sql.NullString
+		err = d.db.QueryRow(`
+			SELECT photo, name 
+			FROM users 
+			WHERE id = ?`, refID).Scan(&photo, &name)
+		if err != nil {
+			return nil, err
+		}
+
+		// Create pointers for photo and name only if they are valid
+		var photoPtr, namePtr *string
+		if photo.Valid {
+			photoPtr = &photo.String
+		}
+		if name.Valid {
+			namePtr = &name.String
+		}
 
 		refs = append(refs, model.Referral{
 			UserID:           refID,
+			Photo:            photoPtr,
+			Name:             namePtr,
 			CreatedAt:        createdAt,
 			ActiveDays:       activeDays,
 			TotalInvested:    totalInvested,

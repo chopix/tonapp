@@ -61,6 +61,7 @@ type ReferralDetail struct {
 	UserID              int     `json:"user_id"`
 	Level               int     `json:"level"`
 	TotalInvested       float64 `json:"total_invested"`
+	TotalInvestedUSD    float64 `json:"total_invested_usd"`
 	EarningsFromUser    float64 `json:"earnings_from_user"`
 	EarningsFromUserUSD float64 `json:"earnings_from_user_usd"`
 	Level1Earnings      float64 `json:"level1_earnings"`
@@ -85,6 +86,8 @@ type ReferralEarning struct {
 
 type Referral struct {
 	UserID           int     `json:"user_id"`
+	Photo            *string `json:"photo"`
+	Name             *string `json:"name"`
 	CreatedAt        int64   `json:"created_at"`
 	ActiveDays       int     `json:"active_days"`
 	TotalInvested    float64 `json:"total_invested"`

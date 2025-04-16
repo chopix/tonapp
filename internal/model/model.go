@@ -59,6 +59,8 @@ type ReferralStats struct {
 // ReferralDetail represents detailed information about a referral
 type ReferralDetail struct {
 	UserID              int     `json:"user_id"`
+	Name                *string  `json:"name"`
+	Photo               *string  `json:"photo"`
 	Level               int     `json:"level"`
 	TotalInvested       float64 `json:"total_invested"`
 	TotalInvestedUSD    float64 `json:"total_invested_usd"`

@@ -632,6 +632,8 @@ func (d *Database) GetReferralStats(pubKey string) (*model.ReferralStats, error)
 	for _, ref := range level1Referrals {
 		detail := &model.ReferralDetail{
 			UserID:              ref.UserID,
+			Name:                ref.Name,
+			Photo:               ref.Photo,
 			Level:               1,
 			TotalInvested:       ref.TotalInvested,
 			TotalInvestedUSD:    ref.TotalInvested * dollarRate,
@@ -657,6 +659,8 @@ func (d *Database) GetReferralStats(pubKey string) (*model.ReferralStats, error)
 		} else {
 			detail := &model.ReferralDetail{
 				UserID:              ref.UserID,
+				Name:                ref.Name,
+			    Photo:               ref.Photo,
 				Level:               2,
 				TotalInvested:       ref.TotalInvested,
 				TotalInvestedUSD:    ref.TotalInvested * dollarRate,
@@ -681,6 +685,8 @@ func (d *Database) GetReferralStats(pubKey string) (*model.ReferralStats, error)
 		} else {
 			detail := &model.ReferralDetail{
 				UserID:              ref.UserID,
+				Name:                ref.Name,
+			    Photo:               ref.Photo,
 				Level:               3,
 				TotalInvested:       ref.TotalInvested,
 				TotalInvestedUSD:    ref.TotalInvested * dollarRate,
